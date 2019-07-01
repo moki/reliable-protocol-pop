@@ -1,0 +1,189 @@
+POP Reliable Protocol
+
+Implementation of the reliable protocol on top of the UDP
+
++--Specificationi--+
+|     spec.pdf     |
++------------------+
+
+
+POP Header:
+
+ 0		     1			 2		     3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|	      Magic		|    Version	|    Command	|
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|			Sequence Number				|
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|			   Session Id				|
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+Magic:
+
+0xC461/50273 decimal when taken as unsigned 16-bit(2 byte) int
+in network byte order.
+Packet whose first 2 bytes do not match magic - discarded.
+
+Version:
+
+8-bit(1 byte) protocol version, the value is 1.
+
+Command:
+
+Specifies message type, 8-bit(1 byte) value.
+
++------------+-------+------+-------+---------+
+| Type	     | HELLO | DATA | ALIVE | GOODBYE |
++------------+-------+------+-------+---------+
+| code point | 0     | 1    | 2     | 3       |
++------------+-------+------+-------+---------+
+
+Sequence Number:
+
+In messages sent by the client is 0 initially for the first packet of the
+session, 1 for the next packet and so on. Server sequence numbers, simply
+count up each time it sends something in any session.
+Field size is 32-bit(4 bytes).
+
+Session Id:
+
+Arbitrary 32-bit(4 bytes) int, in network byte order. The client is to choose
+its value at random when it starts. Both the client and the server repeat the
+session id in all messages that are part of that session.
+
+Multi byte values are sent big-endian, referred to as network byte order.
+
+DATA Command Messages - POP Header is followed by data, data size can be
+determined by subtracting POP Header length from the UDP packet length.
+UPD packet contains only one POP Message, all POP Messages must in a single
+UDP packet.
+
+UDP packet size limit is 65535(2^16 - 1), which includes 8 byte header,
+however actual data limit is imposed by IPv4 with its header size 20 bytes,
+which gives us 65535(2^16 - 1) - 8 bytes - 20 bytes = 65507.
+
+Therefore maximum data payload for a POP Message can be 65507 - 12 bytes
+(POP Header) = 65495.
+
+State Machine Keys:
+
+Transition: 	State:
+
+*---------*	+------------+
+|  event  |	| state name |
+| ------- |	+------------+
+| actions |
+*---------*
+
+Server Session State Machine:
+
+ 			*---------------------------------*
+			| 	       DATA	          |
+			| ------------------------------- |
+			| ALIVE; Cancel Timer; Set Timer  |
+			*---------------------------------*
+		       	 |				 |
+ *------------------*	 |				 v
+ | 	HELLO       |   +---------------------------------+
+ | ---------------- |-->| 	     Receive	 	  |
+ | HELLO; Set Timer |   +---------------------------------+
+ *------------------*    |	  			 |
+			 |				 |
+		    *---------*			    *---------*
+		    | Timeout |			    | GOODBYE |
+		    | ------- |			    | ------- |
+		    | GOODBYE |			    | GOODBYE |
+            	    *---------*			    *---------*
+			 |				 |
+			 v				 v
+		        +---------------------------------+
+		        |	       Done	 	  |
+		        +---------------------------------+
+
+Set Timer    - sets the sessions expiration timer.
+Cancel Timer - cancels sessions ongoing timer.
+Timeout	     - session timed out.
+
+Sessions created by the server after receiving HELLO message
+with a new session id, if message is of other type
+connection terminated.
+
+Upon received DATA, client is made aware that session still up
+with an ALIVE message.
+
+Server session keeps track of the client sequence number it expects next.
+Arriving Session packet sequence number should be seq(n - 1) + 1,
+where n is the packet number.
+* Sequence number for the packet is greater than expected one - "lost packet".
+* Sequence number for the packet same as for the last one - "duplicate packet"
+  and the packet is discarded.
+* Sequence number for the packet less than the last one - protocol error,
+  and the session is closed.
+  (seq.nums. from the past, packets out of order)
+
+Server receiving message, for which there is no transition in its current state
+leads to protocol error, and closing of the session.
+
+Client State Machine:
+
+	  |
+	  |
+*------------------*
+|		   |
+| ---------------- |
+| HELLO; Set Timer |						  *-------------*
+*------------------*						  |    stdin    |
+	  |							  | ----------- |
+       *--*				     *-----------------*  |    DATA     |
+       |				     |      stdin      |  *-------------*
+       v				     | --------------- |  |             |
++------------+	*--------------*  +-------+  | DATA; Set Timer |  |             v
+|            |  |    HELLO     |  |       |--*-----------------*->+-------------+
+| Hello Wait |->| ------------ |->| Ready |			  | Ready Timer |
+|	     |  | Cancel Timer |  |  	  |<-*-----------------*--+-------------+
+*------------*  *--------------*  +-------+  |      ALIVE      |         |
+       |			      |      | --------------- |         |
+       |			      |	     |   Cancel Timer  |         |
+       |			      |	     *-----------------*         |
+       *---------*		  *---*		    *--------------------*
+		 |		  |		    |
+		 |		  |		    |
+	*------------------* *----------* *------------------*
+	| { Timeout, eof } | |   eof	| | { Timeout, eof } |
+	| ---------------- | | -------- | | ---------------- |
+	|      GOODBYE	   | | GOODBYE  | |      GOODBYE     |
+	*------------------* *----------* *------------------*
+		 |		  |		    |
+		 |		  *-----*	    |
+		 *------------------*   |   *-------*
+				    |   |   |
+				    |   |   |
+				    |   |   |	*---------*
+				    |   |   |	| GOODBYE |
+				    v   v   v	| ------- |
+			*-------*  +---------+  |	  |  +--------+
+			| ALIVE |->|	     |--*---------*->|	      |
+			| ----- |  | Closing |		     | Closed |
+			|       |--|	     |--*---------*->|	      |
+			*-------*  +---------+	| Timeout |  +--------+
+						| ------- |
+						|	  |
+						*---------*
+
+Client usually intiates session termination with a GOODBYE message.
+However, if client receives a GOODBYE, it believes that the server is gone,
+no matter what the client's current state, immediately transitioning to
+the Closed State.
+
+Client shutsdown upon eof, "q" from stdin or timeout.
+
+Thread based implementation:
+
+thread/server
+thread/client
+
+Async event loop implementation:
+
+async/server
+async/client
