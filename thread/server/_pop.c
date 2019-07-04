@@ -7,6 +7,7 @@
 
 #define _POP_HEADER_BYTES (12)
 #define _POP_HEADER_MAGIC (50273)
+#define _POP_HEADER_VERSION (1)
 
 struct _pop_pkt_hdr {
         uint16_t magic;
@@ -56,41 +57,35 @@ int8_t _pop_pkt_init(uint8_t *b, size_t bs, _pop_pkt_t **pop_packet) {
         if (!packet->data)
                 exit(EXIT_FAILURE);
 
-        size_t *i = malloc(sizeof(size_t));
-        if (!i)
-                exit(EXIT_FAILURE);
-
         size_t k = 0;
-
+        size_t i = 0;
         memset(packet->header, 0, sizeof(_pop_pkt_hdr_t));
         memset(packet->data, 0, sizeof(uint8_t) * (bs - _POP_HEADER_BYTES + 1));
-        *i = 0;
 
         /* parsing packet header */
         /* magic */
-        _pack_bytess(b, i, &packet->header->magic);
+        _pack_bytess(b, &i, &packet->header->magic);
         packet->header->magic = ntohs(packet->header->magic);
         if (packet->header->magic != _POP_HEADER_MAGIC) {
                 free(packet->header);
                 free(packet->data);
                 free(packet);
-                free(i);
                 return -1;
         }
         /* version */
-        packet->header->version = b[(*i)++];
+        packet->header->version = b[i++];
         /* command */
-        packet->header->command = b[(*i)++];
+        packet->header->command = b[i++];
         /* sequence number */
-        _pack_bytesl(b, i, &packet->header->seqnum);
+        _pack_bytesl(b, &i, &packet->header->seqnum);
         packet->header->seqnum = ntohl(packet->header->seqnum);
         /* session id */
-        _pack_bytesl(b, i, &packet->header->sessid);
+        _pack_bytesl(b, &i, &packet->header->sessid);
         packet->header->sessid = ntohl(packet->header->sessid);
 
         /* data payload */
-        for (k = 0; *i < bs; ++(*i), ++k)
-                (packet->data)[k] = b[*i];
+        for (k = 0; i < bs; ++i, ++k)
+                (packet->data)[k] = b[i];
         packet->data[k] = '\0';
 
         fprintf(stdout,
@@ -101,7 +96,6 @@ int8_t _pop_pkt_init(uint8_t *b, size_t bs, _pop_pkt_t **pop_packet) {
                 packet->header->sessid, (char *)packet->data);
 
         *pop_packet = packet;
-        free(i);
         return 0;
 }
 
