@@ -30,7 +30,7 @@ clean:
 test:
 	make clean
 	make
-	valgrind --tool=memcheck --leak-check=yes --track-origins=yes ./server.out 3000 & sleep 10 && bash ./test-server.sh
+	valgrind --tool=memcheck --leak-check=yes --track-origins=yes ./server.out 3000 & sleep 5 && bash ./test-server.sh
 
 $(DEPDIR)/%.d: ;
 .PRECIOUS: $(DEPDIR)/%.d
