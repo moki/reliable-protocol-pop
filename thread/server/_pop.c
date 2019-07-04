@@ -66,6 +66,7 @@ int8_t _pop_pkt_init(uint8_t *b, size_t bs, _pop_pkt_t **pop_packet) {
         /* magic */
         _pack_bytess(b, &i, &packet->header->magic);
         packet->header->magic = ntohs(packet->header->magic);
+        /* discard non pop protocol packets */
         if (packet->header->magic != _POP_HEADER_MAGIC) {
                 free(packet->header);
                 free(packet->data);
@@ -74,6 +75,14 @@ int8_t _pop_pkt_init(uint8_t *b, size_t bs, _pop_pkt_t **pop_packet) {
         }
         /* version */
         packet->header->version = b[i++];
+        /* discard wrong versioned pop packet */
+        if (packet->header->version != _POP_HEADER_VERSION) {
+                free(packet->header);
+                free(packet->data);
+                free(packet);
+                return -1;
+        }
+
         /* command */
         packet->header->command = b[i++];
         /* sequence number */
