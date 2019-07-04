@@ -68,7 +68,8 @@ int ptpool_init(ptpool_t *thread_pool, ptpool_attr_t *attr) {
         if (!threads)
 		return -1;
         for (i = 0; i < thread_pool->pool_size; i++) {
-                err = pthread_create(&(threads[i]), NULL, ptpool_worker, thread_pool);
+                err = pthread_create(&(threads[i]), NULL, ptpool_worker,
+                                     thread_pool);
                 if (err)
                         return -1;
         }
@@ -233,8 +234,8 @@ int ptpool_destroy(ptpool_t *thread_pool, bool gracefully) {
 	if (err)
 		return -1;
 	for (i = 0; i < thread_pool->pool_size; i++) {
-		err = pthread_join(thread_pool->threads[i], NULL);
-		if (err)
+                err = pthread_join((thread_pool->threads)[i], NULL);
+                if (err)
 			return -1;
 	}
 	free(thread_pool->threads);
@@ -244,6 +245,10 @@ int ptpool_destroy(ptpool_t *thread_pool, bool gracefully) {
 		thread_pool->queue_head = cursor;
 	}
 
-	free(thread_pool);
+        pthread_mutex_destroy(&(thread_pool->queue_lock));
+        pthread_cond_destroy(&(thread_pool->queue_notempty));
+        pthread_cond_destroy(&(thread_pool->queue_notfull));
+        pthread_cond_destroy(&(thread_pool->queue_empty));
+        free(thread_pool);
 	return 0;
 }

@@ -4,6 +4,7 @@
 #include "_net.h"
 #include "_pop.h"
 #include "_utils.h"
+#include "ptpool.h"
 
 #include <errno.h>
 #include <netinet/in.h>
@@ -59,7 +60,7 @@ int8_t server_loop(int listener) {
                 _check_err(err, "recv: failed", _FATAL);
                 if (strcmp((const char *)udp_buffer, "q") == 0) {
                         free(udp_buffer);
-                        exit(EXIT_SUCCESS);
+                        return 0;
                 }
                 err = serve_peer(listener);
                 _check_err(err, "server_peer: failed", _FATAL);
@@ -73,6 +74,8 @@ int main(int argc, char **argv) {
         uintmax_t portnum;
         int8_t err;
         int listener;
+        ptpool_attr_t ptpattr;
+        ptpool_t *thread_pool;
 
         err = argc != 2 ? -1 : 0;
         _check_err(err, USAGE, _FATAL);
@@ -83,12 +86,28 @@ int main(int argc, char **argv) {
         err = portnum > 65535 ? -1 : 0;
         _check_err(err, "err, port out of range", _FATAL);
 
+        err = ptpool_attr_init(&ptpattr);
+        _check_err(err, "ptpool_attr_init: failed", _FATAL);
+        err = ptpool_attr_setpoolsize(&ptpattr, 4);
+        _check_err(err, "ptpool_attr_setpoolsize: failed", _FATAL);
+        err = ptpool_attr_setqueuesize(&ptpattr, 12);
+        _check_err(err, "ptpool_attr_setqueuesize: failed", _FATAL);
+
+        thread_pool = malloc(sizeof(ptpool_t));
+        if (!thread_pool)
+                exit(EXIT_FAILURE);
+        err = ptpool_init(thread_pool, &ptpattr);
+        _check_err(err, "ptpool_init: failed", _FATAL);
+
         err = _net_listen_udp(argv[1], &listener);
         _check_err(err, "_net_listen_udp: failed", _FATAL);
 
         fprintf(stdout, "server listens on localhost:%s\n", argv[1]);
         err = server_loop(listener);
         _check_err(err, "server_loop: failed", _FATAL);
+
+        err = ptpool_destroy(thread_pool, true);
+        _check_err(err, "ptpool_destroy: failed", _FATAL);
 
         return 0;
 }
