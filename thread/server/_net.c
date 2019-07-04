@@ -3,8 +3,10 @@
 
 #include <netdb.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
-int8_t _net_listen_udp(char *port, int *listener) {
+int8_t _net_listen_udp(char *port, int *sockfd) {
         struct addrinfo hints;
         struct addrinfo *server;
         struct addrinfo *cursor;
@@ -38,7 +40,17 @@ int8_t _net_listen_udp(char *port, int *listener) {
         if (!cursor)
                 return -1;
 
-        *listener = _listener;
+        *sockfd = _listener;
 
+        return 0;
+}
+
+int8_t _net_read_udp(int sockfd, uint8_t *b, size_t bs, ssize_t *read) {
+        *read = recv(sockfd, b, bs, 0);
+        if (*read == -1)
+                return -1;
+        _check_err(*read > _UDP_MAX_DATA_PAYLOAD ? -1 : 0,
+                   "_net_read_udp: packet size", _FATAL);
+        b[*read] = '\0';
         return 0;
 }
