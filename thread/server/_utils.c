@@ -19,7 +19,7 @@ int8_t _parse_port(char *portstr, uintmax_t *portdest) {
         return 0;
 }
 
-void _check_err(int8_t errcode, char *msg, bool fatal) {
+void _check_err(int64_t errcode, char *msg, bool fatal) {
         if (errcode < 0)
                 fprintf(stderr, "%s\n", msg);
         if (errcode < 0 && fatal)

@@ -2,10 +2,22 @@
 #define _POSIX_C_SOURCE (200809L)
 #define _XOPEN_SOURCE (700)
 
+#include "_utils.h"
 #include <inttypes.h>
+#include <netdb.h>
 #include <unistd.h>
 
 #define _UDP_MAX_DATA_PAYLOAD (65507)
 
-extern int8_t _net_listen_udp(char *port, int *sockfd);
-extern int8_t _net_read_udp(int sockfd, uint8_t *b, size_t bs, ssize_t *read);
+struct _net_udp_conn {
+        struct sockaddr_storage addr;
+        socklen_t addr_len;
+        char *port;
+        int sk;
+};
+
+typedef struct _net_udp_conn _net_udp_conn_t;
+
+extern int8_t _net_udp_listen(_net_udp_conn_t *conn);
+extern int8_t _net_udp_dial(_net_udp_conn_t *conn);
+extern int8_t _net_udp_read(_net_udp_conn_t *conn, _buf_t *b);
