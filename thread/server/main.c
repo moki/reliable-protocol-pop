@@ -6,62 +6,14 @@
 #include "_server.h"
 #include "_utils.h"
 #include "ptpool.h"
-
-#include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/select.h>
-#include <unistd.h>
 
 #define USAGE ("Usage: server port\nWhere port is < 65536")
-
-struct server_state {
-        _server_sessions_t *sessions;
-        _net_udp_conn_t *lisconn;
-        _buf_t *b;
-        fd_set _rfds;
-        fd_set rfds;
-};
-
-typedef struct server_state server_state_t;
-
-int8_t server_loop(server_state_t *state) {
-        int64_t err;
-        _pop_pkt_t *pop_packet;
-
-        for (;;) {
-                state->rfds = state->_rfds;
-                memset(state->b->b, 0, state->b->bs);
-                err = select(state->lisconn->sk + 1, &state->rfds, NULL, NULL,
-                             NULL);
-                _check_err(err, "select: failed", _FATAL);
-
-                /* handle "q", eof */
-                if (FD_ISSET(STDIN_FILENO, &state->rfds)) {
-                        state->b->bwr =
-                                read(STDIN_FILENO, state->b->b, state->b->bs);
-                        _check_err(state->b->bwr, "read: failed", _FATAL);
-                        if (state->b->b[0] == 'q' || !(state->b->bwr))
-                                return 0;
-                        continue;
-                }
-
-                /* handle inc. connection */
-                err = _net_udp_read(state->lisconn, state->b);
-                _check_err(err, "_net_udp_read: failed", _FATAL);
-                err = _pop_pkt_init(state->b->b, state->b->bs, &pop_packet);
-                _check_err(err, "_pop_pkt_init: failed", !_FATAL);
-                if (err)
-                        continue;
-                err = _pop_pkt_destroy(&pop_packet);
-                _check_err(err, "_pop_pkt_destroy: failed", _FATAL);
-        }
-
-        return 0;
-}
 
 int main(int argc, char **argv) {
         _server_sessions_t *sessions;
@@ -89,7 +41,7 @@ int main(int argc, char **argv) {
         _check_err(err, "ptpool_attr_init: failed", _FATAL);
         err = ptpool_attr_setpoolsize(&ptpattr, 4);
         _check_err(err, "ptpool_attr_setpoolsize: failed", _FATAL);
-        err = ptpool_attr_setqueuesize(&ptpattr, 12);
+        err = ptpool_attr_setqueuesize(&ptpattr, 10);
         _check_err(err, "ptpool_attr_setqueuesize: failed", _FATAL);
         thread_pool = malloc(sizeof(ptpool_t));
         if (!thread_pool)
@@ -137,16 +89,19 @@ int main(int argc, char **argv) {
         state = malloc(sizeof(server_state_t));
         if (!state)
                 exit(EXIT_FAILURE);
+        state->thread_pool = thread_pool;
         state->sessions = sessions;
         state->lisconn = lisconn;
         state->_rfds = _rfds;
         state->rfds = rfds;
         state->b = b;
 
+        /* step into server loop */
         fprintf(stdout, "server listens on localhost:%s\n", lisconn->port);
         err = server_loop(state);
         _check_err(err, "server_loop: failed", _FATAL);
 
+        /* TODO: clean-up exising sessions */
         /* clean up */
         err = _server_sessions_destroy(sessions);
         _check_err(err, "_server_session_destroy: failed", _FATAL);

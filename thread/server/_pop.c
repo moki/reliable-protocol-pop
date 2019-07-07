@@ -1,8 +1,8 @@
 #include "_pop.h"
 #include "_utils.h"
-#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define _POP_HEADER_BYTES (12)
@@ -97,12 +97,14 @@ int8_t _pop_pkt_init(uint8_t *b, size_t bs, _pop_pkt_t **pop_packet) {
                 (packet->data)[k] = b[i];
         packet->data[k] = '\0';
 
+        /*
         fprintf(stdout,
                 "magic: %u\nversion: %u\ncommand: %u\nseqno: %u\nsessid: %u\n"
                 "data:\n%s\n",
                 packet->header->magic, packet->header->version,
                 packet->header->command, packet->header->seqnum,
                 packet->header->sessid, (char *)packet->data);
+        */
 
         *pop_packet = packet;
         return 0;
@@ -118,3 +120,5 @@ int8_t _pop_pkt_destroy(_pop_pkt_t **pop_packet) {
         *pop_packet = NULL;
         return 0;
 }
+
+uint8_t *_pop_pkt_getdata(_pop_pkt_t *pop_packet) { return pop_packet->data; }

@@ -1,9 +1,7 @@
 #include "_net.h"
 
-#include <netdb.h>
+#include <arpa/inet.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 
 int8_t _net_udp_listen(_net_udp_conn_t *conn) {
         if (!conn)
@@ -54,6 +52,22 @@ int8_t _net_udp_read(_net_udp_conn_t *conn, _buf_t *b) {
         b->bwr = recvfrom(conn->sk, b->b, b->bs, 0,
                           (struct sockaddr *)&(conn->addr), &(conn->addr_len));
         if (b->bwr < 0)
+                return -1;
+        return 0;
+}
+
+int8_t _net_udp_conn_getaddr(_net_udp_conn_t *conn) {
+        if (!conn)
+                return -1;
+        struct sockaddr *address = (struct sockaddr *)&(conn->addr);
+        void *_address;
+        if (address->sa_family == AF_INET)
+                _address = &(((struct sockaddr_in *)address)->sin_addr);
+        else
+                _address = &(((struct sockaddr_in6 *)address)->sin6_addr);
+        void *ptr = (char *)inet_ntop(conn->addr.ss_family, _address,
+                                      conn->addrstr, INET6_ADDRSTRLEN);
+        if (!ptr)
                 return -1;
         return 0;
 }
