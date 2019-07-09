@@ -121,4 +121,38 @@ int8_t _pop_pkt_destroy(_pop_pkt_t **pop_packet) {
         return 0;
 }
 
-uint8_t *_pop_pkt_getdata(_pop_pkt_t *pop_packet) { return pop_packet->data; }
+uint8_t _pop_pkt_getdata(_pop_pkt_t *pop_packet, uint8_t **data) {
+        if (!pop_packet)
+                return -1;
+        if (!data)
+                return -1;
+        *data = pop_packet->data;
+        return 0;
+}
+
+uint8_t _pop_pkt_hdr_getsessid(_pop_pkt_t *pop_packet, uint32_t *sessid) {
+        if (!pop_packet)
+                return -1;
+        if (!sessid)
+                return -1;
+        *sessid = pop_packet->header->sessid;
+        return 0;
+}
+
+uint8_t _pop_pkt_hdr_getcommand(_pop_pkt_t *pop_packet, uint8_t *cmd) {
+        if (!pop_packet)
+                return -1;
+        if (!cmd)
+                return -1;
+        *cmd = pop_packet->header->command;
+        return 0;
+}
+
+uint8_t _pop_pkt_hdr_getseqnum(_pop_pkt_t *pop_packet, uint32_t *seqnum) {
+        if (!pop_packet)
+                return -1;
+        if (!seqnum)
+                return -1;
+        *seqnum = pop_packet->header->seqnum;
+        return 0;
+}
