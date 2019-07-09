@@ -11,7 +11,8 @@ struct _net_udp_conn {
         struct sockaddr_storage addr;
         socklen_t addr_len;
         char addrstr[INET6_ADDRSTRLEN];
-        char *port;
+        uint16_t destport;
+        uint16_t srcport;
         int sk;
 };
 
@@ -20,4 +21,6 @@ typedef struct _net_udp_conn _net_udp_conn_t;
 extern int8_t _net_udp_listen(_net_udp_conn_t *conn);
 extern int8_t _net_udp_dial(_net_udp_conn_t *conn);
 extern int8_t _net_udp_read(_net_udp_conn_t *conn, _buf_t *b);
-extern int8_t _net_udp_conn_getaddr(_net_udp_conn_t *conn);
+extern int8_t _net_udp_write(_net_udp_conn_t *conn, _buf_t *b);
+extern int8_t _net_udp_conn_setaddrstr(_net_udp_conn_t *conn);
+extern int8_t _net_udp_conn_setsrcport(_net_udp_conn_t *conn);
