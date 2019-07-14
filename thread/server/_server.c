@@ -216,11 +216,6 @@ void _server_session_process(void *args) {
 
         err = _server_session_removepacket(cursor, &p);
         _check_err(err, "_server_session_removepacket: failed", _FATAL);
-
-        err = pthread_mutex_unlock(&(ss->lock));
-        _check_err(err, "pthread_mutex_unlock: failed", _FATAL);
-        free(args);
-
         err = _pop_pkt_hdr_getcommand(p, &cmd);
         _check_err(err, "_pop_pkt_hdr_getcommand: failed", _FATAL);
         err = _pop_pkt_hdr_getseqnum(p, &seqnum);
@@ -272,6 +267,10 @@ void _server_session_process(void *args) {
 
         err = _pop_pkt_destroy(&p);
         _check_err(err, "_pop_pkt_destroy: failed", _FATAL);
+
+        err = pthread_mutex_unlock(&(ss->lock));
+        _check_err(err, "pthread_mutex_unlock: failed", _FATAL);
+        free(args);
 }
 
 void _server_packet_distribute(void *args) {
