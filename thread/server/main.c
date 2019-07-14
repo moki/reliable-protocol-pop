@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
         lisconn = malloc(sizeof(_net_udp_conn_t));
         if (!lisconn)
                 exit(EXIT_FAILURE);
-        lisconn->port = argv[1];
+        lisconn->destport = portnum;
         lisconn->addr_len = sizeof(struct sockaddr_storage);
         err = _net_udp_listen(lisconn);
         _check_err(err, "_net_udp_listen: failed", _FATAL);
@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
         state->b = b;
 
         /* step into server loop */
-        fprintf(stdout, "server listens on localhost:%s\n", lisconn->port);
+        fprintf(stdout, "server listens on localhost:%u\n", lisconn->destport);
         err = server_loop(state);
         _check_err(err, "server_loop: failed", _FATAL);
 
