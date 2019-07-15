@@ -52,5 +52,6 @@ extern int8_t _server_session_setpeerconn(_server_session_t *s,
 extern int8_t _server_session_addpacket(_server_session_t *s, _pop_pkt_t *p);
 extern int8_t _server_session_removepacket(_server_session_t *s,
                                            _pop_pkt_t **p);
-
+int8_t _server_session_getseqnum(_server_session_t *s, uint32_t *seqnum);
+int8_t _server_session_getid(_server_session_t *s, uint32_t *id);
 extern int8_t server_loop(server_state_t *state);

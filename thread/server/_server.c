@@ -13,12 +13,14 @@
 
 struct process_args {
         _server_sessions_t *ss;
+        _server_session_t *s;
 };
 
 typedef struct process_args process_args_t;
 
 struct distribute_args {
         _server_sessions_t *ss;
+        _server_session_t *sp;
         _pop_pkt_t *p;
         char address[INET6_ADDRSTRLEN];
         uint16_t port;
@@ -45,6 +47,7 @@ int8_t _server_session_init(_server_session_t *s) {
                 return -1;
         s->head = s->last = NULL;
         s->next = NULL;
+        s->peerconn = NULL;
         return 0;
 }
 
@@ -69,6 +72,20 @@ int8_t _server_session_setpeerconn(_server_session_t *s,
         if (!conn)
                 return -1;
         s->peerconn = conn;
+        return 0;
+}
+
+int8_t _server_session_getseqnum(_server_session_t *s, uint32_t *seqnum) {
+        if (!s)
+                return -1;
+        *seqnum = s->seqnum;
+        return 0;
+}
+
+int8_t _server_session_getid(_server_session_t *s, uint32_t *id) {
+        if (!s)
+                return -1;
+        *id = s->id;
         return 0;
 }
 
@@ -187,6 +204,57 @@ int8_t _server_sessions_destroy(_server_sessions_t *ss) {
         return 0;
 }
 
+int8_t _server_session_reply(uint8_t type, _server_session_t *s) {
+        if (!s)
+                return -1;
+        if (type != HELLO && type != ALIVE && type != GOODBYE)
+                return -1;
+
+        _pop_pkt_t *p;
+        uint32_t seqnum;
+        uint32_t sessid;
+        int8_t err;
+        _buf_t *b;
+
+        p = malloc(sizeof(_pop_pkt_t));
+        if (!p)
+                exit(EXIT_FAILURE);
+        p->header = malloc(sizeof(_pop_pkt_hdr_t));
+        if (!p->header)
+                exit(EXIT_FAILURE);
+
+        err = _server_session_getseqnum(s, &seqnum);
+        _check_err(err, "_server_session_getseqnum: failed", _FATAL);
+        err = _server_session_getid(s, &sessid);
+        _check_err(err, "_server_session_getid: failed", _FATAL);
+
+        err = _pop_pkt_setmagic(p, (uint16_t)_POP_HEADER_MAGIC);
+        _check_err(err, "_pop_pkt_setmagic: failed", _FATAL);
+        err = _pop_pkt_setversion(p, (uint8_t)_POP_HEADER_VERSION);
+        _check_err(err, "_pop_pkt_setversion: failed", _FATAL);
+        err = _pop_pkt_setcommand(p, type);
+        _check_err(err, "_pop_pkt_setcommand: failed", _FATAL);
+        err = _pop_pkt_setseqnum(p, seqnum);
+        _check_err(err, "_pop_pkt_setseqnum: failed", _FATAL);
+        err = _pop_pkt_setsessid(p, sessid);
+        _check_err(err, "_pop_pkt_setsessid: failed", _FATAL);
+
+        b = malloc(sizeof(_buf_t));
+
+        err = _pop_pkt_serialize(p, b);
+        _check_err(err, "_pop_pkt_serialize: failed", _FATAL);
+
+        err = _net_udp_write(s->peerconn, b);
+        _check_err(err, "_net_udp_write: failed", _FATAL);
+
+        free(p->header);
+        free(p);
+        free(b->b);
+        free(b);
+
+        return 0;
+}
+
 void _server_session_process(void *args) {
         if (!args)
                 exit(EXIT_FAILURE);
@@ -196,25 +264,19 @@ void _server_session_process(void *args) {
         int8_t err;
         err = pthread_mutex_lock(&(ss->lock));
         _check_err(err, "pthread_mutex_lock: failed", _FATAL);
+        _server_session_t *s = ((process_args_t *)args)->s;
+        if (!s)
+                exit(EXIT_FAILURE);
         _pop_pkt_t *p;
         uint32_t seqnum;
         uint32_t sessid;
+        uint8_t *data;
         uint8_t cmd;
 
         /* debug */
-        fprintf(stdout, "%lu\n\n", syscall(SYS_gettid));
+        // fprintf(stdout, "%lu\n\n", syscall(SYS_gettid));
 
-        _server_session_t *cursor;
-        for (cursor = ss->head; cursor; cursor = cursor->next) {
-                if (cursor->head)
-                        break;
-        }
-
-        /* all packets processed */
-        if (!cursor)
-                return;
-
-        err = _server_session_removepacket(cursor, &p);
+        err = _server_session_removepacket(s, &p);
         _check_err(err, "_server_session_removepacket: failed", _FATAL);
         err = _pop_pkt_hdr_getcommand(p, &cmd);
         _check_err(err, "_pop_pkt_hdr_getcommand: failed", _FATAL);
@@ -222,47 +284,75 @@ void _server_session_process(void *args) {
         _check_err(err, "_pop_pkt_hdr_getseqnum: failed", _FATAL);
         err = _pop_pkt_hdr_getsessid(p, &sessid);
         _check_err(err, "_pop_pkt_hdr_getsessid: failed", _FATAL);
+        err = _pop_pkt_getdata(p, &data);
+        _check_err(err, "_pop_pkt_getdata: failed", _FATAL);
 
-        if (cmd == HELLO && seqnum == 0 && seqnum == cursor->seqnum) {
-                fprintf(stdout, "Hello packet\n");
-                _buf_t *bf = malloc(sizeof(_buf_t));
-                bf->bs = strlen("HELLO") + 1;
-                bf->b = malloc(sizeof(uint8_t) * bf->bs);
-                if (!bf->b)
-                        exit(EXIT_FAILURE);
-                memset(bf->b, 0, bf->bs);
-                strncpy((char *)bf->b, "HELLO", strlen("HELLO"));
+        if (!(s->seqnum)) {
+                if (cmd == HELLO && !seqnum) {
+                        fprintf(stdout, "%u [%u] Session  created\n", sessid,
+                                seqnum);
+                        err = _server_session_reply(HELLO, s);
+                        _check_err(err, "_server_session_reply: failed",
+                                   _FATAL);
 
-                err = _server_session_setid(cursor, sessid);
-                _check_err(err, "_server_session_setid: failed", _FATAL);
+                        err = _server_session_setseqnum(s, s->seqnum + 1);
+                        _check_err(err, "_server_session_setseqnum: failed",
+                                   _FATAL);
 
-                err = _net_udp_write(cursor->peerconn, bf);
-                _check_err(err, "_net_udp_write: failed", _FATAL);
+                } else {
+                        err = _server_session_reply(GOODBYE, s);
+                        _check_err(err, "_server_session_reply", _FATAL);
+                        err = _server_sessions_removesession(ss, s);
+                        _check_err(err,
+                                   "_server_sessions_removesession: failed",
+                                   _FATAL);
+                }
+        } else if (cmd == DATA) {
+                if (seqnum < s->seqnum) {
+                        if (seqnum == s->seqnum - 1) {
+                                fprintf(stdout, "%u [%u] Duplicate packet!\n",
+                                        sessid, seqnum);
+                                err = _server_session_reply(ALIVE, s);
+                                _check_err(err, "_server_session_reply: failed",
+                                           _FATAL);
+                        } else {
+                                fprintf(stderr, "%u [%u] Protocol error!\n",
+                                        sessid, seqnum);
+                                err = _server_session_reply(GOODBYE, s);
+                                _check_err(err, "_server_session_reply: failed",
+                                           _FATAL);
+                                err = _server_sessions_removesession(ss, s);
+                                _check_err(err,
+                                           "_server_sessions_removesessions: "
+                                           "failed",
+                                           _FATAL);
+                        }
+                } else {
+                        uint32_t i;
+                        i = s->seqnum;
+                        for (; i != seqnum; ++i) {
+                                fprintf(stdout, "%u [%u] Lost packet!\n",
+                                        sessid, i);
+                        }
+                        fprintf(stdout, "%u [%u] %s\n", sessid, seqnum, data);
+                        err = _server_session_setseqnum(s, i);
+                        _check_err(err, "_server_session_setseqnum: failed",
+                                   _FATAL);
+                        err = _server_session_reply(ALIVE, s);
+                        _check_err(err, "_server_session_reply: failed\n",
+                                   _FATAL);
+                        err = _server_session_setseqnum(s, i + 1);
+                        _check_err(err, "_server_session_setseqnum: failed",
+                                   _FATAL);
+                }
+        } else {
+                if (cmd != GOODBYE) {
+                        fprintf(stderr, "%u [%u] Unknown state transition\n",
+                                sessid, seqnum);
+                }
 
-                err = _server_session_setseqnum(cursor, cursor->seqnum + 1);
-                _check_err(err, "_server_session_setseqnum: failed", _FATAL);
-
-                free(bf->b);
-                free(bf);
-        } else if (cmd == DATA && seqnum == cursor->seqnum) {
-                fprintf(stdout, "Data packet\n");
-                _buf_t *bf = malloc(sizeof(_buf_t));
-                bf->bs = strlen("ALIVE") + 1;
-
-                bf->b = malloc(sizeof(uint8_t) * bf->bs);
-                if (!bf->b)
-                        exit(EXIT_FAILURE);
-                memset(bf->b, 0, bf->bs);
-                strncpy((char *)bf->b, "ALIVE", strlen("ALIVE"));
-
-                err = _net_udp_write(cursor->peerconn, bf);
-                _check_err(err, "_net_udp_write: failed", _FATAL);
-
-                err = _server_session_setseqnum(cursor, cursor->seqnum + 1);
-                _check_err(err, "_server_session_setseqnum: failed", _FATAL);
-
-                free(bf->b);
-                free(bf);
+                _server_session_reply(GOODBYE, s);
+                _server_sessions_removesession(ss, s);
         }
 
         err = _pop_pkt_destroy(&p);
@@ -298,7 +388,7 @@ void _server_packet_distribute(void *args) {
         _check_err(err, "pthread_mutex_lock", _FATAL);
 
         /* debug */
-        fprintf(stdout, "%lu\n\n", syscall(SYS_gettid));
+        // fprintf(stdout, "%lu\n\n", syscall(SYS_gettid));
 
         err = _pop_pkt_hdr_getsessid(p, &psid);
         _check_err(err, "_pop_pkt_hdr_getsessid: failed", _FATAL);
@@ -335,9 +425,11 @@ void _server_packet_distribute(void *args) {
         /* append packet to a session's packets queue */
         err = _server_session_addpacket(s, p);
         _check_err(err, "_server_session_setpacket: failed", _FATAL);
+
+        ((distribute_args_t *)args)->sp = s;
+
         err = pthread_mutex_unlock(&(ss->lock));
         _check_err(err, "pthread_mutex_unlock: failed", _FATAL);
-        free(passed);
 }
 
 int8_t server_loop(server_state_t *state) {
@@ -364,7 +456,7 @@ int8_t server_loop(server_state_t *state) {
                 }
 
                 /* debug */
-                fprintf(stdout, "%lu\n\n", syscall(SYS_gettid));
+                // fprintf(stdout, "%lu\n\n", syscall(SYS_gettid));
 
                 /* handle inc. connection */
                 err = _net_udp_read(state->lisconn, state->b);
@@ -375,7 +467,7 @@ int8_t server_loop(server_state_t *state) {
                 _check_err(err, "_net_udp_conn_setport: failed", _FATAL);
                 /* parse packet */
                 err = _pop_pkt_init(state->b->b, state->b->bs, &pop_packet);
-                _check_err(err, "_pop_pkt_init: packet discarded", !_FATAL);
+                // _check_err(err, "_pop_pkt_init: packet discarded", !_FATAL);
                 if (err)
                         continue;
 
@@ -398,6 +490,9 @@ int8_t server_loop(server_state_t *state) {
                 if (!process_args)
                         exit(EXIT_FAILURE);
                 process_args->ss = state->sessions;
+                process_args->s = distribute_args->sp;
+
+                free(distribute_args);
 
                 ptpool_wqueue_add(state->thread_pool, _server_session_process,
                                   process_args);
