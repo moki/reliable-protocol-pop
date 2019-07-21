@@ -2,6 +2,22 @@ POP Reliable Protocol
 
 Implementation of the reliable protocol on top of the UDP
 
+Thread based implementation:
+
+thread/server
+thread/client
+
+to spinup the server:
+cd thread/server
+make test
+
+to perform multiple clients test:
+cd thread/client
+bash concurrent-clients-test.sh
+
+both client and server provides classic usage info.
+
+
 +--Specificationi--+
 |     spec.pdf     |
 +------------------+
@@ -177,11 +193,6 @@ no matter what the client's current state, immediately transitioning to
 the Closed State.
 
 Client shutsdown upon eof, "q" from stdin or timeout.
-
-Thread based implementation:
-
-thread/server
-thread/client
 
 Async event loop implementation:
 
