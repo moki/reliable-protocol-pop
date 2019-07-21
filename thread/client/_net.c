@@ -128,7 +128,6 @@ int8_t _net_udp_dial(_net_udp_conn_t *conn) {
                         inet_ntop(AF_INET, &srcaddr->sin_addr, s, sizeof(s));
                         fprintf(stdout, "address: %s\n", s);
                         */
-
                 } else {
                         struct sockaddr_in6 *srcaddr =
                                 (struct sockaddr_in6 *)saddr;
@@ -150,20 +149,15 @@ int8_t _net_udp_dial(_net_udp_conn_t *conn) {
                         */
                 }
 
-                err = connect(sk, cursor->ai_addr, cursor->ai_addrlen);
-                _check_err(err, "connect: failed", !_FATAL);
-                if (err)
-                        continue;
+                conn->addr = cursor->ai_addr;
+                conn->addr_len = cursor->ai_addrlen;
 
-                /* debug
-                fprintf(stdout, "dial: Success\n");
-                */
                 break;
         }
 
         free(saddr);
         free(portstr);
-        freeaddrinfo(client);
+        conn->addrinfo = client;
 
         if (!cursor)
                 return -1;
@@ -178,9 +172,7 @@ int8_t _net_udp_read(_net_udp_conn_t *conn, _buf_t *b) {
                 return -1;
         if (!b)
                 return -1;
-        b->bwr = recv(conn->sk, b->b, b->bs, 0);
-        perror("why_read");
-
+        b->bwr = recvfrom(conn->sk, b->b, b->bs, 0, NULL, NULL);
         if (b->bwr < 0)
                 return -1;
         return 0;
@@ -191,28 +183,13 @@ int8_t _net_udp_write(_net_udp_conn_t *conn, _buf_t *b) {
                 return -1;
         if (!b)
                 return -1;
-        b->bwr = send(conn->sk, b->b, b->bs, 0);
+        b->bwr = sendto(conn->sk, b->b, b->bs, 0, (conn->addr),
+                        (conn->addr_len));
         if (b->bwr < 0) {
                 perror("write failed: ");
                 return -1;
         }
 
-        return 0;
-}
-
-int8_t _net_udp_conn_setsrcaddrstr(_net_udp_conn_t *conn) {
-        if (!conn)
-                return -1;
-        struct sockaddr *address = (struct sockaddr *)&(conn->addr);
-        void *_address;
-        if (address->sa_family == AF_INET)
-                _address = &(((struct sockaddr_in *)address)->sin_addr);
-        else
-                _address = &(((struct sockaddr_in6 *)address)->sin6_addr);
-        void *ptr = (char *)inet_ntop(conn->addr.ss_family, _address,
-                                      conn->srcaddrstr, INET6_ADDRSTRLEN);
-        if (!ptr)
-                return -1;
         return 0;
 }
 
@@ -247,5 +224,12 @@ int8_t _net_udp_conn_setdestaddrstr(_net_udp_conn_t *conn,
         if (!strncpy(conn->destaddrstr, addrstr, INET6_ADDRSTRLEN))
                 return -1;
 
+        return 0;
+}
+
+int8_t _net_udp_conn_destroy(_net_udp_conn_t *conn) {
+        if (!conn)
+                return -1;
+        freeaddrinfo(conn->addrinfo);
         return 0;
 }

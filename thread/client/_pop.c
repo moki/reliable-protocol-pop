@@ -25,15 +25,17 @@ static int8_t _pack_bytesl(const uint8_t *s, size_t *i, uint32_t *d) {
         return 0;
 }
 
-int8_t _pop_pkt_serialize(_pop_pkt_t *packet, _buf_t *b) {
+int8_t _pop_pkt_serialize(_pop_pkt_t *packet, _buf_t *b, size_t ds) {
         if (!packet)
                 return -1;
         if (!b)
                 return -1;
 
         /* data serialization not implemented */
+        /*
         if (packet->header->command == DATA)
                 return -2;
+        */
 
         uint32_t seqnum;
         uint32_t sessid;
@@ -41,7 +43,7 @@ int8_t _pop_pkt_serialize(_pop_pkt_t *packet, _buf_t *b) {
         size_t i;
         size_t j;
 
-        b->bs = _POP_HEADER_BYTES;
+        b->bs = _POP_HEADER_BYTES + ds;
         b->b = malloc(b->bs);
         if (!b->b)
                 exit(EXIT_FAILURE);
@@ -59,6 +61,8 @@ int8_t _pop_pkt_serialize(_pop_pkt_t *packet, _buf_t *b) {
                 b->b[j] = (uint8_t)(seqnum >> (4 - 1 - i) * 8);
         for (i = 0; i < 4; ++i, ++j)
                 b->b[j] = (uint8_t)(sessid >> (4 - 1 - i) * 8);
+        for (i = 0; i < ds; ++i, ++j)
+                b->b[j] = packet->data[i];
 
         return 0;
 }

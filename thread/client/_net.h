@@ -8,7 +8,12 @@
 #define _UDP_MAX_DATA_PAYLOAD (65507)
 
 struct _net_udp_conn {
+        /*
         struct sockaddr_storage addr;
+        socklen_t addr_len;
+        */
+        struct addrinfo *addrinfo;
+        struct sockaddr *addr;
         socklen_t addr_len;
         char srcaddrstr[INET6_ADDRSTRLEN];
         char destaddrstr[INET6_ADDRSTRLEN];
@@ -28,3 +33,4 @@ extern int8_t _net_udp_conn_setdestaddrstr(_net_udp_conn_t *conn,
                                            char addr[INET6_ADDRSTRLEN]);
 extern int8_t _net_udp_conn_setsrcport(_net_udp_conn_t *conn);
 extern int8_t _net_udp_conn_setdestport(_net_udp_conn_t *conn, uint16_t port);
+extern int8_t _net_udp_conn_destroy(_net_udp_conn_t *conn);

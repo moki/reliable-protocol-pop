@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
         err = source_port > 65535 ? -1 : 0;
         _check_err(err, "err, port out of range", _FATAL);
 
-        srand(time(NULL));
+        srand(time(NULL) ^ source_port);
 
         /* configure dial connection */
         dialconn = malloc(sizeof(_net_udp_conn_t));
@@ -101,8 +101,8 @@ int main(int argc, char **argv) {
         /* destruction */
         free(b->b);
         free(b);
+        _net_udp_conn_destroy(dialconn);
         free(dialconn);
         free(state);
-
         return 0;
 }

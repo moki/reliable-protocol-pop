@@ -351,6 +351,7 @@ void _server_session_process(void *args) {
                                 sessid, seqnum);
                 }
 
+                fprintf(stdout, "%u Session closed\n", sessid);
                 _server_session_reply(GOODBYE, s);
                 _server_sessions_removesession(ss, s);
         }
